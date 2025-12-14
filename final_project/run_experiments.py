@@ -1,9 +1,14 @@
 import pandas as pd
 import numpy as np
+import random
 from sklearn.metrics import accuracy_score, f1_score, recall_score, confusion_matrix
 from data_pipeline import build_dataset
 from baseline import BaselineModel
 from final_report import ProtoNetModel
+
+# Set random seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Simplified backtesting function
 def backtest(predictions, test_meta_df, commission_rate=0.002):
@@ -58,7 +63,7 @@ def run_experiments():
         - Classification metrics: accuracy, macro F1, per-class recall, confusion matrix.
         - Backtesting metrics: total return, maximum drawdown, number of trades.
 
-    Results are saved to results.csv.
+    Results are saved to results.csv and summarized in results_summary.md.
     """
     config = {
         'start_date': '2020-01-01',
@@ -80,20 +85,17 @@ def run_experiments():
     accuracy = accuracy_score(y_test, y_pred)
     macro_f1 = f1_score(y_test, y_pred, average='macro')
     recalls = recall_score(y_test, y_pred, average=None)
-    cm = confusion_matrix(y_test, y_pred)
     total_return, max_drawdown, num_trades = backtest(y_pred, test_meta_df)
 
     results.append({
-        'Experiment': 'E0 Baseline',
-        'Accuracy': accuracy,
-        'Macro F1': macro_f1,
-        'Recall_0': recalls[0],
-        'Recall_1': recalls[1],
-        'Recall_2': recalls[2],
-        'Confusion Matrix': cm.tolist(),
-        'Total Return': total_return,
-        'Max Drawdown': max_drawdown,
-        'Num Trades': num_trades
+        'model_name': 'E0 Baseline',
+        'accuracy': accuracy,
+        'macro_f1': macro_f1,
+        'recall_sell': recalls[0],
+        'recall_buy': recalls[2],
+        'total_return': total_return,
+        'mdd': max_drawdown,
+        'num_trades': num_trades
     })
 
     # Experiment E1: ProtoNet (no few-shot)
@@ -104,20 +106,17 @@ def run_experiments():
     accuracy = accuracy_score(y_test, y_pred)
     macro_f1 = f1_score(y_test, y_pred, average='macro')
     recalls = recall_score(y_test, y_pred, average=None)
-    cm = confusion_matrix(y_test, y_pred)
     total_return, max_drawdown, num_trades = backtest(y_pred, test_meta_df)
 
     results.append({
-        'Experiment': 'E1 ProtoNet (no few-shot)',
-        'Accuracy': accuracy,
-        'Macro F1': macro_f1,
-        'Recall_0': recalls[0],
-        'Recall_1': recalls[1],
-        'Recall_2': recalls[2],
-        'Confusion Matrix': cm.tolist(),
-        'Total Return': total_return,
-        'Max Drawdown': max_drawdown,
-        'Num Trades': num_trades
+        'model_name': 'E1 ProtoNet (no few-shot)',
+        'accuracy': accuracy,
+        'macro_f1': macro_f1,
+        'recall_sell': recalls[0],
+        'recall_buy': recalls[2],
+        'total_return': total_return,
+        'mdd': max_drawdown,
+        'num_trades': num_trades
     })
 
     # Experiment E2: ProtoNet (few-shot)
@@ -128,26 +127,37 @@ def run_experiments():
     accuracy = accuracy_score(y_test, y_pred)
     macro_f1 = f1_score(y_test, y_pred, average='macro')
     recalls = recall_score(y_test, y_pred, average=None)
-    cm = confusion_matrix(y_test, y_pred)
     total_return, max_drawdown, num_trades = backtest(y_pred, test_meta_df)
 
     results.append({
-        'Experiment': 'E2 ProtoNet (few-shot)',
-        'Accuracy': accuracy,
-        'Macro F1': macro_f1,
-        'Recall_0': recalls[0],
-        'Recall_1': recalls[1],
-        'Recall_2': recalls[2],
-        'Confusion Matrix': cm.tolist(),
-        'Total Return': total_return,
-        'Max Drawdown': max_drawdown,
-        'Num Trades': num_trades
+        'model_name': 'E2 ProtoNet (few-shot)',
+        'accuracy': accuracy,
+        'macro_f1': macro_f1,
+        'recall_sell': recalls[0],
+        'recall_buy': recalls[2],
+        'total_return': total_return,
+        'mdd': max_drawdown,
+        'num_trades': num_trades
     })
 
-    # Save results
+    # Save results to CSV
     results_df = pd.DataFrame(results)
-    print(results_df)
     results_df.to_csv('results.csv', index=False)
+
+    # Generate summary report
+    with open('results_summary.md', 'w') as f:
+        f.write("# Experiment Results Summary\n\n")
+        for result in results:
+            f.write(f"## {result['model_name']}\n")
+            f.write(f"- Accuracy: {result['accuracy']:.4f}\n")
+            f.write(f"- Macro F1: {result['macro_f1']:.4f}\n")
+            f.write(f"- Recall (Sell): {result['recall_sell']:.4f}\n")
+            f.write(f"- Recall (Buy): {result['recall_buy']:.4f}\n")
+            f.write(f"- Total Return: {result['total_return']:.4f}\n")
+            f.write(f"- Max Drawdown: {result['mdd']:.4f}\n")
+            f.write(f"- Number of Trades: {result['num_trades']}\n\n")
+
+    print("Results saved to results.csv and results_summary.md.")
 
 if __name__ == '__main__':
     run_experiments()
