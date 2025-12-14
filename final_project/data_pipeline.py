@@ -2,6 +2,76 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
+def calculate_rsi(data, period=14):
+    """
+    Calculate Relative Strength Index (RSI)
+    
+    Args:
+        data: DataFrame, must contain 'Close' column
+        period: RSI period, default is 14 days
+    
+    Returns:
+        Series: RSI values (0-100)
+    """
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+def calculate_sma(data, period=20):
+    """
+    Calculate Simple Moving Average (SMA)
+    
+    Args:
+        data: DataFrame, must contain 'Close' column
+        period: SMA period, default is 20 days
+    
+    Returns:
+        Series: SMA values
+    """
+    return data['Close'].rolling(window=period).mean()
+
+
+def calculate_atr(data, period=14):
+    """
+    Calculate Average True Range (ATR)
+    
+    Args:
+        data: DataFrame, must contain 'High', 'Low', 'Close' columns
+        period: ATR period, default is 14 days
+    
+    Returns:
+        Series: ATR values
+    """
+    high_low = data['High'] - data['Low']
+    high_close = np.abs(data['High'] - data['Close'].shift())
+    low_close = np.abs(data['Low'] - data['Close'].shift())
+    
+    true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = true_range.rolling(window=period).mean()
+    return atr
+
+
+def calculate_log_returns(data, periods=[5, 10, 20]):
+    """
+    Calculate logarithmic returns
+    
+    Args:
+        data: DataFrame, must contain 'Close' column
+        periods: List of periods for calculation
+    
+    Returns:
+        DataFrame: DataFrame with columns for each period's logarithmic returns
+    """
+    result = pd.DataFrame(index=data.index)
+    for period in periods:
+        result[f'LogReturn_{period}'] = np.log(data['Close'] / data['Close'].shift(period))
+    return result
+
 def download_stock_data(stock_id, start_date='2020-01-01', end_date='2024-12-31'):
     """
     Download stock data.
@@ -60,6 +130,8 @@ def engineer_features(data):
 
     # 7. Handle infinite and large values (replace with NaN, which will be removed by subsequent dropna)
     df = df.replace([np.inf, -np.inf], np.nan)
+    
+    return df
 
 def create_labels(data, threshold=0.004, hold_threshold=0.002):
     """
@@ -121,6 +193,6 @@ def build_dataset(ticker, config):
     y_test = test_data['Target']
 
     # Create test_meta_df
-    test_meta_df = test_data[['Date', 'Open', 'Close']]
+    test_meta_df = test_data.reset_index()[['Date', 'Open', 'Close']]
 
     return X_train, y_train, X_test, y_test, test_meta_df
