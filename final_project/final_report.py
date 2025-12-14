@@ -1,13 +1,12 @@
 """
-AI 金融交易系統 - 針對 2020-2024 台股市場
-目標：使用機器學習模型預測股票走勢，並與 0050 進行比較
+AI Financial Trading System - Focused on the Taiwan Stock Market (2020-2024)
+Objective: Use machine learning models to predict stock trends and compare with the 0050 benchmark.
 
-選定標的：
-1. 2330.TW 台積電 (權值型/大盤連動高)
-2. 2317.TW 鴻海 (AI題材/趨勢型)
-3. 2603.TW 長榮 (景氣循環/高波動型)
-對標：0050.TW 元大台灣50
-
+Selected Stocks:
+1. 2330.TW TSMC (Large-cap/Highly correlated with the market)
+2. 2317.TW Hon Hai (AI-related/Trend-following)
+3. 2603.TW Evergreen Marine (Cyclical/High volatility)
+Benchmark: 0050.TW Yuanta Taiwan 50 ETF
 """
 
 import yfinance as yf
@@ -28,9 +27,9 @@ from data_pipeline import download_stock_data, engineer_features, create_labels,
 
 warnings.filterwarnings('ignore')
 
-# ==================== 第一部分：技術指標計算 ====================
+# ==================== Part 1: Technical Indicator Calculation ====================
 
-# ==================== 新增：度量學習（原型網路）模型 ====================
+# ==================== Added: Metric Learning (Prototypical Network) Model ====================
 
 class ProtoEncoder(nn.Module):
     def __init__(self, input_dim: int, embedding_dim: int = 16, hidden_dims=(64, 32), dropout: float = 0.1):
@@ -50,10 +49,10 @@ class ProtoEncoder(nn.Module):
 
 
 class ProtoNet:
-    """簡化版 Prototypical Networks for tabular classification.
-    - 使用 MLP 取得 embedding
-    - episodic 訓練：每回合對每一類抽 K 支持與 Q 查詢，最小化查詢到各原型距離的交叉熵
-    - 推論：以全訓練集嵌入的類別平均向量作為原型，取最近原型
+    """Simplified Prototypical Networks for tabular classification.
+    - Use MLP to obtain embedding
+    - Episodic training: In each episode, sample K supports and Q queries from each class, minimizing the cross-entropy of queries to prototype distances
+    - Inference: Use the class average vectors embedded by the entire training set as prototypes, and take the nearest prototype
     """
 
     def __init__(self,
@@ -97,30 +96,30 @@ class ProtoNet:
         for c in range(self.n_classes):
             m = (y_idx == c)
             if m.sum() == 0:
-                # 若某類別沒有樣本，設為零向量
+                # If there are no samples for a class, set to zero vector
                 protos.append(torch.zeros(emb.shape[1], device=self.device))
             else:
                 protos.append(emb[m].mean(dim=0))
         return torch.stack(protos, dim=0)  # (C, D)
 
     def fit(self, X: np.ndarray, y: np.ndarray):
-        # 建立標籤索引映射
+        # Build label index mapping
         classes = np.sort(np.unique(y))
         self.class_to_index = {c: i for i, c in enumerate(classes)}
         self.index_to_class = {i: c for c, i in self.class_to_index.items()}
         y_idx = np.vectorize(self.class_to_index.get)(y)
 
-        # 標準化特徵
+        # Standardize features
         X_scaled = self.scaler.fit_transform(X)
         X_tensor = self._to_tensor(X_scaled)
 
         optimizer = optim.Adam(self.encoder.parameters(), lr=self.lr)
 
         rng = np.random.default_rng(42)
-        # 為每一類建立索引集合
+        # For each class, build an index set
         idx_by_class = {c: np.where(y_idx == c)[0] for c in range(self.n_classes)}
 
-        # 訓練（簡化 episodic）
+        # Training (simplified episodic)
         self.encoder.train()
         for epoch in range(self.epochs):
             total_loss = 0.0
@@ -134,7 +133,7 @@ class ProtoNet:
                     if len(idxs) == 0:
                         valid = False
                         break
-                    # 若數量不足，允許重複抽樣
+                    # If the number of samples is insufficient, allow resampling
                     s = rng.choice(idxs, size=self.K, replace=(len(idxs) < self.K))
                     q = rng.choice(idxs, size=self.Q, replace=(len(idxs) < self.Q))
                     support_idx.append(s)
@@ -149,16 +148,16 @@ class ProtoNet:
                 X_que = X_tensor[query_idx]
                 y_que = y_idx[query_idx]
 
-                # 取得嵌入與原型
+                # Obtain embedding and prototype
                 z_sup = self.encoder(X_sup)  # (C*K, D)
                 z_que = self.encoder(X_que)  # (C*Q, D)
 
-                # 計算每類的原型（support 平均）
-                # 將 support 拆回各類別切塊
+                # Calculate the prototype for each class (support average)
+                # Split support back to class chunks
                 z_chunks = torch.chunk(z_sup, self.n_classes, dim=0)
                 protos = torch.stack([zc.mean(dim=0) for zc in z_chunks], dim=0)  # (C, D)
 
-                # 距離 -> logits
+                # Distance -> logits
                 # z_que: (Nq, D), protos: (C, D)
                 # pairwise distances
                 dists = torch.cdist(z_que, protos, p=2)  # (Nq, C)
@@ -174,9 +173,9 @@ class ProtoNet:
 
             if episodes > 0 and (epoch + 1) % 5 == 0:
                 avg_loss = total_loss / episodes
-                print(f"ProtoNet 訓練 Epoch {epoch+1}/{self.epochs} - 平均損失: {avg_loss:.4f}")
+                print(f"ProtoNet Training Epoch {epoch+1}/{self.epochs} - Average Loss: {avg_loss:.4f}")
 
-        # 以所有訓練樣本建立最終原型
+        # Establish final prototype with all training samples
         self.encoder.eval()
         with torch.no_grad():
             z_all = self.encoder(X_tensor)
@@ -193,10 +192,10 @@ class ProtoNet:
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         Z = self._embed(X)  # (N, D)
-        # 距離到原型
+        # Distance to prototype
         dists = ((Z[:, None, :] - self.prototypes[None, :, :]) ** 2).sum(axis=2)  # (N, C)
         idx = dists.argmin(axis=1)
-        # 映回原始標籤
+        # Map back to original label
         return np.vectorize(self.index_to_class.get)(idx)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
@@ -206,12 +205,12 @@ class ProtoNet:
         # softmax
         e = np.exp(logits - logits.max(axis=1, keepdims=True))
         p = e / e.sum(axis=1, keepdims=True)
-        # 需對應原始類別順序（0,1,2）
+        # Need to correspond to original class order (0,1,2)
         # self.index_to_class: idx -> class_label
         order = [self.class_to_index[c] for c in sorted(self.class_to_index.keys())]
         return p[:, order]
 
-    # 用於持久化
+    # For persistence
     def get_state(self):
         return {
             'model_type': 'prototypical',
@@ -250,14 +249,14 @@ class ProtoNet:
             temperature=state['temperature'],
             device='cpu'
         )
-        # 還原 encoder 權重
+        # Restore encoder weights
         sd = {k: torch.tensor(v) for k, v in state['state_dict'].items()}
         model.encoder.load_state_dict(sd)
-        # 還原 scaler
+        # Restore scaler
         model.scaler.mean_ = np.array(state['scaler_mean_'])
         model.scaler.scale_ = np.array(state['scaler_scale_'])
         model.scaler.n_features_in_ = model.input_dim
-        # 還原原型與索引映射
+        # Restore prototypes and index mapping
         model.prototypes = np.array(state['prototypes'])
         model.class_to_index = state['class_to_index']
         model.index_to_class = state['index_to_class']

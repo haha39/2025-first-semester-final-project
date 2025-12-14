@@ -7,7 +7,18 @@ from final_report import ProtoNetModel
 
 # Simplified backtesting function
 def backtest(predictions, test_meta_df, commission_rate=0.002):
-    capital = 1.0  # Start with 1 unit of capital
+    """
+    Perform a simplified backtest based on predictions.
+
+    Args:
+        predictions: Array of predicted actions (0 = sell, 1 = hold, 2 = buy).
+        test_meta_df: DataFrame containing metadata (Open and Close prices).
+        commission_rate: Transaction cost rate (default 0.2%).
+
+    Returns:
+        tuple: (total return, maximum drawdown, number of trades).
+    """
+    capital = 1.0  # Initial capital
     max_drawdown = 0.0
     peak = capital
     num_trades = 0
@@ -35,6 +46,20 @@ def backtest(predictions, test_meta_df, commission_rate=0.002):
 
 # Experiment runner
 def run_experiments():
+    """
+    Run experiments to evaluate Baseline and ProtoNet models.
+
+    Experiments:
+        E0: Baseline (RandomForestClassifier).
+        E1: ProtoNet without few-shot training.
+        E2: ProtoNet with few-shot training.
+
+    Metrics:
+        - Classification metrics: accuracy, macro F1, per-class recall, confusion matrix.
+        - Backtesting metrics: total return, maximum drawdown, number of trades.
+
+    Results are saved to results.csv.
+    """
     config = {
         'start_date': '2020-01-01',
         'end_date': '2024-12-31',
